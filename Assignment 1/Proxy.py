@@ -42,8 +42,8 @@ except:
 try:
   # Listen on the server socket
   # ~~~~ INSERT CODE ~~~~
-  # Set the maximum number of connections (for example, 6) and start listening
-  serverSocket.listen(6)
+  # Set the maximum number of connections (for example, 5) and start listening
+  serverSocket.listen(5)
   # ~~~~ END CODE INSERT ~~~~
   print ('Listening to socket')
 except:
