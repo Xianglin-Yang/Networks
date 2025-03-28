@@ -123,6 +123,7 @@ while True:
     # ProxyServer finds a cache hit
     # Send back response to client 
     # ~~~~ INSERT CODE ~~~~
+    clientSocket.sendall(cacheData)
     # ~~~~ END CODE INSERT ~~~~
     cacheFile.close()
     print ('Sent to the client:')
@@ -133,6 +134,7 @@ while True:
     # Create a socket to connect to origin server
     # and store in originServerSocket
     # ~~~~ INSERT CODE ~~~~
+    originServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # ~~~~ END CODE INSERT ~~~~
 
     print ('Connecting to:\t\t' + hostname + '\n')
@@ -141,6 +143,8 @@ while True:
       address = socket.gethostbyname(hostname)
       # Connect to the origin server
       # ~~~~ INSERT CODE ~~~~
+      # The default HTTP port is 80
+      originServerSocket.connect((address, 80))
       # ~~~~ END CODE INSERT ~~~~
       print ('Connected to origin Server')
 
@@ -151,6 +155,8 @@ while True:
       # originServerRequest is the first line in the request and
       # originServerRequestHeader is the second line in the request
       # ~~~~ INSERT CODE ~~~~
+      originServerRequest = f"{method} {resource} {version}"
+      originServerRequestHeader = f"Host: {hostname}\r\nConnection: close"
       # ~~~~ END CODE INSERT ~~~~
 
       # Construct the request to send to the origin server
@@ -171,10 +177,17 @@ while True:
 
       # Get the response from the origin server
       # ~~~~ INSERT CODE ~~~~
+      response_bytes = b''
+      while True:
+          chunk = originServerSocket.recv(BUFFER_SIZE)
+          if not chunk:
+              break
+          response_bytes += chunk
       # ~~~~ END CODE INSERT ~~~~
 
       # Send the response to the client
       # ~~~~ INSERT CODE ~~~~
+       clientSocket.sendall(response_bytes)
       # ~~~~ END CODE INSERT ~~~~
 
       # Create a new file in the cache for the requested file.
@@ -186,6 +199,7 @@ while True:
 
       # Save origin server response in the cache file
       # ~~~~ INSERT CODE ~~~~
+      cacheFile.write(response_bytes)
       # ~~~~ END CODE INSERT ~~~~
       cacheFile.close()
       print ('cache file closed')
