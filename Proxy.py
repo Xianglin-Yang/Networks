@@ -22,6 +22,8 @@ try:
   # ~~~~ INSERT CODE ~~~~
   # Use the following code to create a TCP socket
   serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  # Set the socket to be reusable to avoid port occupation
+  serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDER, 1)
   # ~~~~ END CODE INSERT ~~~~
   print ('Created socket')
 except:
