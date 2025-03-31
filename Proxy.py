@@ -61,7 +61,7 @@ while True:
   try:
     # ~~~~ INSERT CODE ~~~~
     # Accepts a client connection and gets a new socket object
-    clientSocket, clientAddr = serverSocket.accept()
+    clientSocket, addr = serverSocket.accept()
     # ~~~~ END CODE INSERT ~~~~
     print ('Received a connection')
   except:
