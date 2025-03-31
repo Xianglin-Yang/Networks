@@ -32,7 +32,6 @@ except:
 try:
   # Bind the the server socket to a host and port
   # ~~~~ INSERT CODE ~~~~
-  # Bind the socket to the specified host and port
   serverSocket.bind((proxyHost, proxyPort))
   # ~~~~ END CODE INSERT ~~~~
   print ('Port is bound')
@@ -59,7 +58,6 @@ while True:
   # Accept connection from client and store in the clientSocket
   try:
     # ~~~~ INSERT CODE ~~~~
-    # Accepts a client connection and gets a new socket object
     clientSocket, addr = serverSocket.accept()
     # ~~~~ END CODE INSERT ~~~~
     print ('Received a connection')
@@ -70,7 +68,6 @@ while True:
   # Get HTTP request from client
   # and store it in the variable: message_bytes
   # ~~~~ INSERT CODE ~~~~
-  # Receives data from a client socket
   message_bytes = clientSocket.recv(BUFFER_SIZE)
   # ~~~~ END CODE INSERT ~~~~
   message = message_bytes.decode('utf-8')
@@ -116,20 +113,43 @@ while True:
 
     fileExists = os.path.isfile(cacheLocation)
     
+    # Check whether the cache is valid (not expired)
+    cache_valid = True
+    meta_location = cacheLocation + ".meta"
+
+    if os.path.isfile(meta_location):
+      try:
+        with open(meta_location, 'r') as meta_file:
+          meta_content = meta_file.read()
+          expires_match = re.search(r'expires_at: (\d+)', meta_content)
+          if expires_match:
+            expires_at = int(expires_match.group(1))
+            current_time = int(time.time())
+              
+            # If cache has expired
+            if current_time > expires_at:
+              print("Cache expired, fetching from origin server")
+              cache_valid = False
+      except:
+        print("Error reading cache metadata, assuming cache is valid")
+
+    # Only use cache if it's valid
+    if not fileExists or not cache_valid:
+      raise Exception("Cache missing or invalid")
+    
     # Check wether the file is currently in the cache
-    cacheFile = open(cacheLocation, "rb")
-    cacheData = cacheFile.read()
+    cacheFile = open(cacheLocation, "r")
+    cacheData = cacheFile.readlines()
 
     print ('Cache hit! Loading from cache file: ' + cacheLocation)
     # ProxyServer finds a cache hit
     # Send back response to client 
     # ~~~~ INSERT CODE ~~~~
-    response = "HTTP/1.1 200 OK\r\n\r\n" + "".join(cacheData)
-    clientSocket.sendall(response.encode())
+    clientSocket.sendall(''.join(cacheData).encode())
     # ~~~~ END CODE INSERT ~~~~
     cacheFile.close()
     print ('Sent to the client:')
-    print ('> ' + str(cacheData[:100] + '...')
+    print ('> ' + ''.join(cacheData))
   except:
     # cache miss.  Get resource from origin server
     originServerSocket = None
@@ -145,8 +165,7 @@ while True:
       address = socket.gethostbyname(hostname)
       # Connect to the origin server
       # ~~~~ INSERT CODE ~~~~
-      # The default HTTP port is 80
-      originServerSocket.connect((address, 80))
+      originServerSocket.connect((hostname, 80))  # HTTP default port is 80
       # ~~~~ END CODE INSERT ~~~~
       print ('Connected to origin Server')
 
@@ -157,8 +176,8 @@ while True:
       # originServerRequest is the first line in the request and
       # originServerRequestHeader is the second line in the request
       # ~~~~ INSERT CODE ~~~~
-      originServerRequest = f"{method} {resource} {version}"
-      originServerRequestHeader = f"Host: {hostname}\r\nConnection: close"
+      originServerRequest = method + " " + resource + " HTTP/1.1"
+      originServerRequestHeader = "Host: " + hostname
       # ~~~~ END CODE INSERT ~~~~
 
       # Construct the request to send to the origin server
@@ -179,17 +198,47 @@ while True:
 
       # Get the response from the origin server
       # ~~~~ INSERT CODE ~~~~
-      response_bytes = b''
-      while True:
-          chunk = originServerSocket.recv(BUFFER_SIZE)
-          if not chunk:
-              break
-          response_bytes += chunk
+      response_bytes = originServerSocket.recv(BUFFER_SIZE)
       # ~~~~ END CODE INSERT ~~~~
+
+      # Parse response to check status code and redirection
+      try:
+        response_str = response_bytes.decode('utf-8', 'ignore')
+        response_lines = response_str.split('\r\n')
+        status_line = response_lines[0]
+        status_code = int(status_line.split(' ')[1])
+        
+        # Check if it's a redirect (301 or 302)
+        location = None
+        if status_code in [301, 302]:
+          for line in response_lines:
+            if line.lower().startswith('location:'):
+              location = line.split(':', 1)[1].strip()
+              break
+          if location:
+            print(f"Detected {status_code} redirect to {location}")
+      except:
+        print("Error parsing response headers")
+        status_code = 200  # Default value
+      
+      # Parse Cache-Control header
+      max_age = None
+      try:
+        for line in response_lines:
+          if line.lower().startswith('cache-control:'):
+            cache_control = line.split(':', 1)[1].strip()
+            if 'max-age=' in cache_control:
+              max_age_part = re.search(r'max-age=(\d+)', cache_control)
+              if max_age_part:
+                max_age = int(max_age_part.group(1))
+                print(f"Found max-age: {max_age} seconds")
+                break
+      except:
+        print("Error parsing Cache-Control header")
 
       # Send the response to the client
       # ~~~~ INSERT CODE ~~~~
-       clientSocket.sendall(response_bytes)
+      clientSocket.sendall(response_bytes)
       # ~~~~ END CODE INSERT ~~~~
 
       # Create a new file in the cache for the requested file.
@@ -201,7 +250,29 @@ while True:
 
       # Save origin server response in the cache file
       # ~~~~ INSERT CODE ~~~~
-      cacheFile.write(response_bytes)
+      # Determine if the response should be cached
+      should_cache = True
+
+      # For 302 temporary redirects, typically don't cache
+      if status_code == 302:
+        should_cache = False
+        print("302 temporary redirect - not caching")
+
+      # If we should cache it, save the response and metadata
+      if should_cache:
+        cacheFile.write(response_bytes)
+        # If max-age is specified, save metadata
+        if max_age is not None:
+          cache_time = int(time.time())  # Current timestamp
+          expiry_time = cache_time + max_age
+          
+          try:
+            meta_file = open(cacheLocation + ".meta", 'w')
+            meta_file.write(f"cached_at: {cache_time}\nexpires_at: {expiry_time}\nmax_age: {max_age}\n")
+            meta_file.close()
+            print(f"Saved cache metadata with expiry in {max_age} seconds")
+          except:
+            print("Error saving cache metadata")
       # ~~~~ END CODE INSERT ~~~~
       cacheFile.close()
       print ('cache file closed')
