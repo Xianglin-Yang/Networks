@@ -4,6 +4,7 @@ import sys
 import os
 import argparse
 import re
+import time
 
 # 1MB buffer size
 BUFFER_SIZE = 1000000
@@ -22,14 +23,12 @@ try:
   # ~~~~ INSERT CODE ~~~~
   # Use the following code to create a TCP socket
   serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  # Set the socket to be reusable to avoid port occupation
-  serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDER, 1)
   # ~~~~ END CODE INSERT ~~~~
   print ('Created socket')
 except:
   print ('Failed to create socket')
   sys.exit()
-
+  
 try:
   # Bind the the server socket to a host and port
   # ~~~~ INSERT CODE ~~~~
